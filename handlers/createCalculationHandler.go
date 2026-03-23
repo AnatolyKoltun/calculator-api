@@ -3,10 +3,10 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/AnatolyKoltun/calculator-api/services"
 	"github.com/gin-gonic/gin"
 
 	"github.com/AnatolyKoltun/calculator-api/models"
+	"github.com/AnatolyKoltun/calculator-api/services"
 )
 
 func CreateCalculation(c *gin.Context) {
