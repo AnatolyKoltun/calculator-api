@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package storage;
+
+option go_package = "github.com/AntalyKoltun/calculator-storage/database/proto";
+
+import "google/protobuf/timestamp.proto";
+
+service StorageService {
+  //  rpc SaveCalculate (Calculation) returns (SaveCalculateResponse);
+  rpc ListCalculations (ListRequest) returns (CalculationListResponse);
+}
+
+message Calculation {
+  int32 id = 1;
+  double argument1 = 2;
+  double argument2 = 3;
+  string operator = 4;
+  double result = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message ListRequest {
+  string DateFrom = 1;
+  string DateTo = 2;
+}
+
+//message SaveCalculateResponse {
+//  string error = 1;
+//}
+
+message CalculationListResponse {
+  repeated Calculation calculations = 1;
+}
