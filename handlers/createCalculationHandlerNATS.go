@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/AnatolyKoltun/calculator-api/services"
 	"github.com/gin-gonic/gin"
 	"github.com/nats-io/nats.go"
 
@@ -19,14 +20,23 @@ func CreateCalculationWithNATS(c *gin.Context, js nats.JetStreamContext) {
 		return
 	}
 
+	calculation, errCount := services.Calculate(req)
+
+	if errCount != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errCount.Error()})
+		return
+	}
+
 	// Публикуем сообщение в NATS
-	data, err := json.Marshal(req)
+	data, err := json.Marshal(calculation)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка формирования сообщения"})
 		return
 	}
 
 	_, err = js.Publish("calculations.create", data)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка отправки в очередь"})
 		return

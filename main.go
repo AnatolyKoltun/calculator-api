@@ -49,6 +49,7 @@ import (
 func main() {
 	// 1. Подключение к NATS
 	natsURL := os.Getenv("NATS_URL")
+
 	if natsURL == "" {
 		natsURL = "nats://localhost:4222"
 	}
