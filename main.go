@@ -34,6 +34,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"time"
@@ -41,6 +42,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/AnatolyKoltun/calculator-api/handlers"
 	pb "github.com/AnatolyKoltun/calculator-api/proto"
@@ -81,11 +84,35 @@ func main() {
 		storageURL = "localhost:50051"
 	}
 
-	grpcConn, err := grpc.Dial(storageURL, grpc.WithInsecure(), grpc.WithTimeout(5*time.Second))
+	// grpc.NewClient - неблокирующий
+	grpcConn, err := grpc.NewClient(storageURL,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
-		log.Fatal("Ошибка подключения к gRPC:", err)
+		log.Fatal("Ошибка создания gRPC клиента:", err)
 	}
 	defer grpcConn.Close()
+
+	// Connect() НЕ возвращает ошибку! Он просто инициирует подключение.
+	// Нужно использовать WaitForStateChange или проверять состояние.
+	grpcConn.Connect()
+
+	// Дожидаемся готовности соединения с таймаутом
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Правильный способ дождаться подключения
+	for {
+		state := grpcConn.GetState()
+		if state == connectivity.Ready {
+			break
+		}
+		if !grpcConn.WaitForStateChange(ctx, state) {
+			log.Fatal("Таймаут подключения к gRPC серверу")
+		}
+	}
+
+	log.Println("gRPC подключение к storage установлено")
 
 	storageClient := pb.NewStorageServiceClient(grpcConn)
 
