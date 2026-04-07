@@ -1,136 +1,26 @@
-//package main
-//
-//import (
-//	"log"
-//	"os"
-//	"time"
-//
-//	"github.com/AnatolyKoltun/calculator-api/handlers"
-//	pb "github.com/AnatolyKoltun/calculator-api/proto"
-//	"github.com/gin-gonic/gin"
-//	"github.com/nats-io/nats.go"
-//	"google.golang.org/grpc"
-//)
-
-//import (
-//	"github.com/gin-gonic/gin"
-//
-//	"github.com/AnatolyKoltun/calculator-api/handlers"
-//)
-//
-//func setupAndRunServer() {
-//	router := gin.Default()
-//
-//	router.POST("/calculate", handlers.CreateCalculation)
-//	router.GET("/calculations", handlers.GetCalculations)
-//
-//	router.Run(":8080")
-//}
-//
-//func main() {
-//	setupAndRunServer()
-//}
-
 package main
 
 import (
-	"context"
 	"log"
-	"os"
-	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/nats-io/nats.go"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/AnatolyKoltun/calculator-api/handlers"
-	pb "github.com/AnatolyKoltun/calculator-api/proto"
+	"github.com/AnatolyKoltun/calculator-api/message_broker"
+	"github.com/AnatolyKoltun/calculator-api/routers"
+	"github.com/AnatolyKoltun/calculator-api/rpc"
 )
 
 func main() {
-	// 1. Подключение к NATS
-	natsURL := os.Getenv("NATS_URL")
+	var CalculationServer rpc.HandleGrpc
+	var StreamNats message_broker.HandleNats
 
-	if natsURL == "" {
-		natsURL = "nats://localhost:4222"
+	defer CalculationServer.CloseConnectGrpcToStorage()
+	defer StreamNats.Close()
+
+	js := StreamNats.CreateStreamNats()
+	storageClient := CalculationServer.ConnectGrpcToStorage()
+
+	server := routers.NewCalculationServer(js, storageClient)
+
+	if err := server.Run(); err != nil {
+		log.Fatal(err)
 	}
-
-	nc, err := nats.Connect(natsURL)
-	if err != nil {
-		log.Fatal("Ошибка подключения к NATS:", err)
-	}
-	defer nc.Close()
-
-	js, err := nc.JetStream()
-	if err != nil {
-		log.Fatal("Ошибка JetStream:", err)
-	}
-
-	// Создаем Stream (если не существует)
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:     "CALCULATIONS",
-		Subjects: []string{"calculations.*"},
-		Storage:  nats.FileStorage,
-	})
-	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
-		log.Fatal("Ошибка создания Stream:", err)
-	}
-
-	// 2. Подключение gRPC клиента к storage
-	storageURL := os.Getenv("STORAGE_SERVICE_URL")
-	if storageURL == "" {
-		storageURL = "localhost:50051"
-	}
-
-	// grpc.NewClient - неблокирующий
-	grpcConn, err := grpc.NewClient(storageURL,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		log.Fatal("Ошибка создания gRPC клиента:", err)
-	}
-	defer grpcConn.Close()
-
-	// Connect() НЕ возвращает ошибку! Он просто инициирует подключение.
-	// Нужно использовать WaitForStateChange или проверять состояние.
-	grpcConn.Connect()
-
-	// Дожидаемся готовности соединения с таймаутом
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Правильный способ дождаться подключения
-	for {
-		state := grpcConn.GetState()
-		if state == connectivity.Ready {
-			break
-		}
-		if !grpcConn.WaitForStateChange(ctx, state) {
-			log.Fatal("Таймаут подключения к gRPC серверу")
-		}
-	}
-
-	log.Println("gRPC подключение к storage установлено")
-
-	storageClient := pb.NewStorageServiceClient(grpcConn)
-
-	// 3. Настройка Gin с передачей зависимостей в обработчики
-	router := gin.Default()
-
-	// POST /calculate — используем NATS publisher
-	router.POST("/calculate", func(c *gin.Context) {
-		// Вызываем обработчик с передачей JetStream
-		handlers.CreateCalculationWithNATS(c, js)
-	})
-
-	// GET /calculations — используем gRPC client
-	router.GET("/calculations", func(c *gin.Context) {
-		// Вызываем обработчик с передачей gRPC клиента
-		handlers.GetCalculationsWithGRPC(c, storageClient)
-	})
-
-	log.Println("API сервер запущен на :8080")
-	router.Run(":8080")
 }

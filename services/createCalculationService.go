@@ -34,11 +34,5 @@ func Calculate(data models.RequestBody) (models.Calculation, error) {
 		CreatedAt: time.Now(),
 	}
 
-	//errSave := calcRepository.Save(context.Background(), &calculation)
-
-	//if errSave != nil {
-	//	return models.Calculation{}, errors.New("Ошибка сохранения в БД: " + errSave.Error())
-	//}
-
 	return calculation, nil
 }
